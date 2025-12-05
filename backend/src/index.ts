@@ -19,7 +19,7 @@ const PORT = process.env.PORT || 5000;
 const allowedOrigins = [
   "http://localhost:3000",
   // REPLACE THIS with your actual Render Frontend URL (no trailing slash)
-  "https://creditsystem-frontend.onrender.com", 
+  "https://creditsystem-1.onrender.com", 
 ];
 
 app.use(
