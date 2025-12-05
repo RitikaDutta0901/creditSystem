@@ -30,33 +30,27 @@ function signToken(userId: string, referralCode: string) {
 }
 
 /**
- * POST /api/auth/register
- * Body: { name?, email, password, refCode? }
+ * POST /auth/register
  */
 router.post("/register", async (req: Request<{}, {}, RegisterBody>, res: Response, next: NextFunction) => {
   try {
     const { name, email, password, refCode } = req.body;
 
-    // Basic validation
     if (!email || !password) {
       return res.status(400).json({ message: "Email and password are required" });
     }
 
-    // Prevent registrations with extremely short passwords (basic rule)
     if (password.length < 6) {
       return res.status(400).json({ message: "Password must be at least 6 characters" });
     }
 
-    // Check existing
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) {
       return res.status(409).json({ message: "Email already registered" });
     }
 
-    // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Generate unique referral code (retry if collision)
     const referralCode = await generateUniqueReferralCode(
       async (candidate) => Boolean(await User.findOne({ referralCode: candidate })),
       name,
@@ -64,16 +58,10 @@ router.post("/register", async (req: Request<{}, {}, RegisterBody>, res: Respons
       20
     );
 
-    // Validate refCode (if provided) and normalize
     let referredBy: string | null = null;
     if (refCode) {
       const ref = await User.findOne({ referralCode: refCode.toUpperCase() });
-      if (ref) {
-        referredBy = ref.referralCode;
-      } else {
-        // If provided refCode invalid, ignore it (or you could return 400)
-        referredBy = null;
-      }
+      if (ref) referredBy = ref.referralCode;
     }
 
     const newUser = new User({
@@ -90,7 +78,6 @@ router.post("/register", async (req: Request<{}, {}, RegisterBody>, res: Respons
 
     const token = signToken(String(newUser._id), newUser.referralCode);
 
-    // Return a minimal user object
     res.status(201).json({
       user: {
         id: newUser._id,
@@ -107,13 +94,13 @@ router.post("/register", async (req: Request<{}, {}, RegisterBody>, res: Respons
 });
 
 /**
- * POST /api/auth/login
- * Body: { email, password }
+ * POST /auth/login
  */
 router.post("/login", async (req: Request<{}, {}, LoginBody>, res: Response, next: NextFunction) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ message: "Email and password are required" });
+    if (!email || !password)
+      return res.status(400).json({ message: "Email and password are required" });
 
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) return res.status(401).json({ message: "Invalid credentials" });
@@ -123,6 +110,21 @@ router.post("/login", async (req: Request<{}, {}, LoginBody>, res: Response, nex
 
     const token = signToken(String(user._id), user.referralCode);
 
+    /** 
+     * ---------------------------------------------------------
+     * 🚀 ADDING THE COOKIE HERE (Render + HTTPS + Cross-site)
+     * ---------------------------------------------------------
+     */
+    res.cookie("auth_token", token, {
+      httpOnly: true,      // cannot be accessed by JS
+      secure: true,        // must be true on Render (HTTPS)
+      sameSite: "none",    // required for frontend→backend cross-site
+      maxAge: 24 * 60 * 60 * 1000, // 1 day
+    });
+
+    /**
+     * You still return JSON — cookie stays as extra.
+     */
     res.json({
       user: {
         id: user._id,
