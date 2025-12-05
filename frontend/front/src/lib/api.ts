@@ -1,10 +1,17 @@
 "use client";
-import axios, { AxiosInstance, AxiosError } from "axios";
+import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from "axios";
 import { useMemo } from "react";
 import { useUserStore } from "../store/useUserStore";
 
 declare const process: any;
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+
+// --- CORRECTION HERE ---
+// 1. Get the raw domain (e.g., http://localhost:5000)
+const RAW_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
+// 2. Append "/api" so all requests hit the correct backend group
+// Result: "http://localhost:5000/api"
+const BASE_URL = `${RAW_URL}/api`; 
 
 export function createApi(token?: string): AxiosInstance {
   const inst = axios.create({
@@ -13,10 +20,12 @@ export function createApi(token?: string): AxiosInstance {
   });
 
   if (token) {
-    inst.interceptors.request.use((cfg) => {
-      if (!cfg.headers) (cfg as any).headers = {};
-      (cfg.headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
-      return cfg;
+    inst.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+      // Safely add the header without breaking types
+      if (config.headers) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
     });
   }
 
@@ -28,13 +37,14 @@ export function useApi() {
   const logout = useUserStore((s) => s.logout);
 
   return useMemo(() => {
-    const api = createApi(token ?? undefined);
+    // Pass undefined if token is null so default param works if needed
+    const api = createApi(token || undefined);
 
     api.interceptors.response.use(
       (resp) => resp,
-      async (error: AxiosError & { config?: any }) => {
+      async (error: AxiosError) => {
+        // Check for 401 (Unauthorized) to log the user out
         if (error.response?.status === 401) {
-          // clear and logout — token invalid
           logout();
         }
         return Promise.reject(error);

@@ -1,65 +1,58 @@
-import { Express, RequestHandler, Request, Response } from "express";
-import mongoose from "mongoose";
-import Purchase from "../models/Purchase";
+// backend/src/routes/purchase_v2.ts
+import express, { Request, Response } from "express";
+import jwt from "jsonwebtoken";
 import User from "../models/User";
-import requireAuth, { AuthRequest } from "../middleware/auth";
 
-const authHandler = requireAuth as unknown as RequestHandler;
+const router = express.Router();
 
-export default function registerPurchaseRoutes(app: Express) {
-  // define handler with the RequestHandler type (this removes the signature redline)
-  const purchaseHandler: RequestHandler = async (req, res) => {
-    // inside the handler, cast req to AuthRequest so TS knows about userId / userReferralCode
-    const r = req as Request & AuthRequest & { body?: any };
+// Middleware to verify token
+const protect = async (req: any, res: Response, next: any) => {
+  let token;
+  if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
+    token = req.headers.authorization.split(" ")[1];
+  }
 
-    const userId = r.userId;
-    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+  if (!token) return res.status(401).json({ message: "Not authorized" });
 
-    const amount = typeof r.body?.amount === "number" ? r.body.amount : 0;
+  try {
+    const decoded: any = jwt.verify(token, process.env.JWT_SECRET || "dev_secret_key");
+    req.user = await User.findById(decoded.userId).select("-password");
+    next();
+  } catch (error) {
+    return res.status(401).json({ message: "Token failed" });
+  }
+};
 
-    const session = await mongoose.startSession();
-    try {
-      await session.withTransaction(async () => {
-        const user = await User.findById(userId).session(session);
-        if (!user) throw { code: 404, message: "User not found" };
+// POST /api/purchase
+router.post("/", protect, async (req: any, res: Response) => {
+  try {
+    const user = req.user;
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-        const purchase = new Purchase({ userId: user._id, amount });
-        await purchase.save({ session });
+    // 1. Add Credits
+    user.credits += 100;
 
-        if (!user.hasConverted && user.referredBy) {
-          const referrer = await User.findOne({ referralCode: user.referredBy }).session(session);
-
-          user.hasConverted = true;
-          user.credits = (user.credits ?? 0) + 2;
-          await user.save({ session });
-
-          if (referrer) {
-            referrer.credits = (referrer.credits ?? 0) + 2;
-            await referrer.save({ session });
-          }
-        } else if (!user.hasConverted && !user.referredBy) {
-          user.hasConverted = true;
-          await user.save({ session });
-        }
-      });
-
-      const refreshed = await User.findById(userId);
-      return res.json({
-        message: "Purchase recorded",
-        credits: refreshed?.credits ?? 0,
-        hasConverted: refreshed?.hasConverted ?? false,
-      });
-    } catch (err: any) {
-      console.error("[purchase_v2] error:", err);
-      if (err?.code === 404) return res.status(404).json({ message: err.message });
-      return res.status(500).json({ message: "Purchase failed", details: String(err) });
-    } finally {
-      session.endSession();
+    // 2. Handle Referral Reward (only if not converted yet)
+    if (user.referredBy && !user.hasConverted) {
+      const referrer = await User.findOne({ referralCode: user.referredBy });
+      if (referrer) {
+        referrer.credits += 50; // Reward referrer
+        await referrer.save();
+      }
+      user.hasConverted = true; // Mark as converted
     }
-  };
 
-  // register route with typed middleware + handler
-  app.post("/purchase/buy", authHandler, purchaseHandler);
+    await user.save();
 
-  console.log("Purchase route registered: POST /purchase/buy");
-}
+    res.json({
+      success: true,
+      message: "Purchase successful",
+      credits: user.credits
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server Error" });
+  }
+});
+
+export default router;

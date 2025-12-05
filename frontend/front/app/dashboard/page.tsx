@@ -6,17 +6,20 @@ import { useApi } from "../../src/lib/api";
 import { useUserStore } from "../../src/store/useUserStore";
 import { useRouter } from "next/navigation";
 
+// 1. FIXED: Types match the backend response exactly
 type DashboardData = {
   referralCode: string;
-  totalReferred: number;
-  referredWhoPurchased: number;
-  totalCredits: number;
-  user: { id: string; name?: string; email: string };
+  referredCount: number;  // Backend sends 'referredCount', not 'totalReferred'
+  convertedCount: number; // Backend sends 'convertedCount', not 'referredWhoPurchased'
+  credits: number;        // Backend sends 'credits', not 'totalCredits'
+  name: string;
+  email: string;
 };
 
 export default function DashboardPage() {
   const router = useRouter();
   const token = useUserStore((s) => s.token);
+  const setUser = useUserStore((s) => s.setUser); // Import this to update global state
   const api = useApi();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,9 +49,24 @@ export default function DashboardPage() {
   
     setBuying(true); setMsg(null);
     try {
-      const resp = await api.post("/purchase/buy", { amount: 100 }, { headers: { Authorization: `Bearer ${t}` }});
+      // 2. FIXED: Correct endpoint "/purchase"
+      const resp = await api.post("/purchase", { amount: 100 }, { headers: { Authorization: `Bearer ${t}` }});
+      
+      // Refresh dashboard data to see new credits
       const r2 = await api.get<DashboardData>("/dashboard/me", { headers: { Authorization: `Bearer ${t}` }});
+      
       setData(r2.data);
+      
+      // 3. FIXED: Sync global store so the header updates too
+      // We map the flat dashboard data to the user object structure expected by the store
+      setUser({ 
+        id: "current", // ID isn't critical for display here
+        name: r2.data.name,
+        email: r2.data.email,
+        referralCode: r2.data.referralCode,
+        credits: r2.data.credits 
+      }, t);
+      
       setMsg(resp?.data?.message ?? "Purchase successful — credits updated.");
     } catch (err: any) {
       setMsg(err?.response?.data?.message || "Purchase failed");
@@ -84,17 +102,20 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="card p-6 text-center">
               <div className="text-sm text-gray-500">Referred</div>
-              <div className="text-2xl font-bold">{data?.totalReferred ?? 0}</div>
+              {/* 4. FIXED: Display 'referredCount' */}
+              <div className="text-2xl font-bold">{data?.referredCount ?? 0}</div>
             </div>
 
             <div className="card p-6 text-center">
               <div className="text-sm text-gray-500">Converted</div>
-              <div className="text-2xl font-bold">{data?.referredWhoPurchased ?? 0}</div>
+              {/* 5. FIXED: Display 'convertedCount' */}
+              <div className="text-2xl font-bold">{data?.convertedCount ?? 0}</div>
             </div>
 
             <div className="card p-6 text-center">
               <div className="text-sm text-gray-500">Credits</div>
-              <div className="text-2xl font-bold">{data?.totalCredits ?? 0}</div>
+              {/* 6. FIXED: Display 'credits' */}
+              <div className="text-2xl font-bold">{data?.credits ?? 0}</div>
             </div>
           </div>
 

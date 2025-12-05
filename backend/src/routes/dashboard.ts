@@ -1,58 +1,46 @@
-// backend/src/routes/dashboard.ts
-
 import express from "express";
 import User from "../models/User";
-import { requireAuth, AuthRequest } from "../middleware/auth";
+import jwt from "jsonwebtoken";
 
 const router = express.Router();
 
-/**
- * GET /api/dashboard/me
- * Returns:
- *  - referralCode
- *  - total referred users
- *  - referred users who purchased
- *  - total credits
- *  - basic user info
- */
-router.get("/me", requireAuth, async (req: AuthRequest, res, next) => {
+const protect = async (req: any, res: any, next: any) => {
+  let token;
+  if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
+    token = req.headers.authorization.split(" ")[1];
+  }
+  
+  if (!token) return res.status(401).json({ message: "Not authorized" });
+
   try {
-    if (!req.userId) {
-      return res.status(401).json({ message: "Unauthorized: Missing user ID" });
-    }
+    const decoded: any = jwt.verify(token, process.env.JWT_SECRET || "dev_secret_key");
+    req.user = await User.findById(decoded.userId).select("-password");
+    next();
+  } catch (error) {
+    return res.status(401).json({ message: "Token failed" });
+  }
+};
 
-    // Fetch signed-in user
-    const user = await User.findById(req.userId);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+router.get("/me", protect, async (req: any, res: any) => {
+  try {
+    const user = req.user;
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-    const referralCode = user.referralCode;
+    // --- NEW LOGIC: Count referrals from Database ---
+    const referredCount = await User.countDocuments({ referredBy: user.referralCode });
+    const convertedCount = await User.countDocuments({ referredBy: user.referralCode, hasConverted: true });
 
-    // Metrics
-    const totalReferred = await User.countDocuments({
-      referredBy: referralCode,
+    res.json({
+      name: user.name,
+      email: user.email,
+      referralCode: user.referralCode,
+      credits: user.credits,
+      referredCount,  // Send actual count
+      convertedCount  // Send actual count
     });
-
-    const referredWhoPurchased = await User.countDocuments({
-      referredBy: referralCode,
-      hasConverted: true,
-    });
-
-    // Respond with dashboard data
-    return res.json({
-      referralCode,
-      totalReferred,
-      referredWhoPurchased,
-      totalCredits: user.credits,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-      },
-    });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server Error" });
   }
 });
 
