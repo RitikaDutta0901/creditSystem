@@ -10,6 +10,6 @@ export interface IUser extends Document {
     createdAt: Date;
     updatedAt: Date;
 }
-declare const _default: mongoose.Model<any, {}, {}, {}, any, any, any>;
+declare const _default: mongoose.Model<any, {}, {}, {}, any, any>;
 export default _default;
 //# sourceMappingURL=User.d.ts.map

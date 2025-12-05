@@ -4,10 +4,8 @@ export interface IPurchase extends Document {
     amount: number;
     createdAt: Date;
 }
-declare const _default: mongoose.Model<IPurchase, {}, {}, {}, mongoose.Document<unknown, {}, IPurchase, {}, mongoose.DefaultSchemaOptions> & IPurchase & Required<{
+declare const _default: mongoose.Model<IPurchase, {}, {}, {}, mongoose.Document<unknown, {}, IPurchase> & IPurchase & {
     _id: mongoose.Types.ObjectId;
-}> & {
-    __v: number;
-}, any, IPurchase>;
+}, any>;
 export default _default;
 //# sourceMappingURL=Purchase.d.ts.map
