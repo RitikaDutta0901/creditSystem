@@ -16,15 +16,17 @@ const corsOptions = {
   allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Requested-With"]
 };
 
-// apply CORS for all routes
+// apply CORS for all routes (this handles preflight too)
 app.use(cors(corsOptions));
 
-// enable preflight responses for every route using a safe path
-app.options('/*', cors(corsOptions)); // <-- changed from '*' to '/*'
+// NOTE: removed app.options('*' / '/*') due to path-to-regexp incompatibility in some environments
 
-// mount routers
-app.use(['/auth', '/api/auth'], authRouter);
+// mount authentication routes on both paths
+app.use(["/auth", "/api/auth"], authRouter);
 
-app.get(['/health', '/api/health'], (req, res) => res.json({ status: "ok" }));
+// health check endpoint
+app.get(["/health", "/api/health"], (req, res) => {
+  res.json({ status: "ok" });
+});
 
 export default app;
