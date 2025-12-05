@@ -1,4 +1,3 @@
-// backend/src/routes/purchase.ts
 import express from "express";
 import mongoose from "mongoose";
 import Purchase from "../models/Purchase";
