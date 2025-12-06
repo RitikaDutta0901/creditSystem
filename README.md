@@ -120,8 +120,8 @@ Deployed on Render:
 👉 https://creditsystem-h89y.onrender.com
 
 Frontend
-Deployed on Render :
-👉 https://creditsystem-1.onrender.com
+Deployed on vercel :
+👉 https://credit-system-fawn.vercel.app
 
 
 🏁 Conclusion
